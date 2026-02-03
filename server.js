@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+require("dotenv").config();
 
 const chatbotHandler = require("./chatbot");
 
@@ -11,7 +12,7 @@ app.use(express.json());
 app.post("/chatbot", chatbotHandler);
 
 app.get("/", function(req, res){
-    res.send("Chatbot backend server started successsufully.")
+    res.send("Chatbot backend server started successfully.")
 });
 
 app.listen(5000, () => {

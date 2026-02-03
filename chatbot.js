@@ -3,6 +3,7 @@ const detectIntent = require("./intentDetector");
 const extractProduct = require("./entityExtractor");
 const db = require("./database");
 const buildReply = require("./replyBuilder");
+const classifyQuery = require("./llmClassifier")
 
 module.exports = async function chatbot(req, res) {
   try {
@@ -13,28 +14,69 @@ module.exports = async function chatbot(req, res) {
     }
 
     const text = normalizeText(message);
-    const intent = detectIntent(text);
-    const product = extractProduct(text);
+    const category = await classifyQuery(text);
+    let reply;
+    let data;
 
-    let data = null;
+    // 1. FACTUAL QUERIES (numbers, stock, inventory)
+    if (category === "FACTUAL") {
 
-    if (intent === "STOCK_QUERY") {
-      data = await db.getStock(product);
+      const intent = detectIntent(text);   
+      const product = extractProduct(text);
+
+      if (intent === "STOCK_QUERY") {
+        data = await db.getStock(product);
+        reply = buildReply("STOCK_QUERY", data, product);
+      }
+
+      else if (intent === "LOW_STOCK") {
+        data = await db.getLowStock();
+        reply = buildReply("LOW_STOCK", data);
+      }
+
+      else if (intent === "DEAD_STOCK") {
+        data = await db.getDeadStock();
+        reply = buildReply("DEAD_STOCK", data);
+      }
+
+      else {
+        reply = "I can help with stock levels, low stock, or dead stock items.";
+      }
     }
 
-    if (intent === "LOW_STOCK") {
-      data = await db.getLowStock();
+    // 2. OPINION-STYLE QUESTIONS
+    else if (category === "OPINION") {
+      const topProduct = await db.getTopSellingProduct();
+
+      if (!topProduct) {
+        reply = "I don’t have enough data yet, but I can help you check stock or sales.";
+      } else {
+        reply =
+          `I don’t have personal preferences, but based on your sales data, ` +
+          `${topProduct.name} is currently performing the best.`;
+      }
     }
 
-    if (intent === "DEAD_STOCK") {
-      data = await db.getDeadStock();
+    // 3. GREETINGS
+    else if (category === "GREETING") {
+      reply = "Hey! 👋 I’m here to help you manage your inventory. What would you like to check?";
     }
 
-    const reply = buildReply(intent, data, product);
+    // 4. HELP
+    else if (category === "HELP") {
+      reply = "You can ask things like: stock of rice, low stock items, or dead stock products.";
+    }
+
+    // 5. UNKNOWN
+    else {
+      reply = "I’m not fully sure about that, but I can help you with inventory or stock-related questions.";
+    }
+
+    // Final response
     res.json({ reply });
-
-  } catch (error) {
-    console.error(error);
+  }
+   catch (error) {
+    console.error("Chatbot error:", error);
     res.json({ reply: "Internal server error" });
   }
 };

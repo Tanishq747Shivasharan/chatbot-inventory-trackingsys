@@ -1,10 +1,10 @@
 const { Pool } = require("pg");
 
 const pool = new Pool({
-  host: "localhost",
-  user: "postgres",
-  password: "tan3533",
-  database: "inventory",
+  host: process.env.DB_HOST || "localhost",
+  user: process.env.DB_USER || "postgres", 
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME || "inventory",
   port: 5432
 });
 
@@ -55,8 +55,25 @@ async function getDeadStock() {
   return result.rows;
 }
 
+// Top selling product
+async function getTopSellingProduct() {
+  const result = await pool.query(
+    `SELECT p.name, SUM(s.quantity_sold) as total_sold
+     FROM products p
+     JOIN stock_logs s ON p.id = s.product_id
+     WHERE s.quantity_sold > 0
+     GROUP BY p.id, p.name
+     ORDER BY total_sold DESC
+     LIMIT 1`
+  );
+
+  if (result.rows.length === 0) return null;
+  return result.rows[0];
+}
+
 module.exports = {
   getStock,
   getLowStock,
-  getDeadStock
+  getDeadStock,
+  getTopSellingProduct
 };
