@@ -3,23 +3,23 @@ const axios = require("axios");
 async function classifyQuery(text) {
   try {
     const prompt = `
-You are a strict classifier.
+        You are a strict classifier.
 
-Classify the user query into EXACTLY ONE category:
-FACTUAL
-OPINION
-GREETING
-HELP
-UNKNOWN
+        Classify the user query into EXACTLY ONE category:
+        FACTUAL
+        OPINION
+        GREETING
+        HELP
+        UNKNOWN
 
-Rules:
-- Respond with ONLY the category name
-- No explanation
-- No extra words
+        Rules:
+        - Respond with ONLY the category name
+        - No explanation
+        - No extra words
 
-User query:
-"${text}"
-`;
+        User query:
+        "${text}"
+        `;
 
     const response = await axios.post(
       "http://localhost:11434/api/generate",

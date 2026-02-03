@@ -3,7 +3,8 @@ const detectIntent = require("./intentDetector");
 const extractProduct = require("./entityExtractor");
 const db = require("./database");
 const buildReply = require("./replyBuilder");
-const classifyQuery = require("./llmClassifier")
+const classifyQuery = require("./llmClassifier");
+const casualReply = require("./casualResponder");
 
 module.exports = async function chatbot(req, res) {
   try {
@@ -15,6 +16,8 @@ module.exports = async function chatbot(req, res) {
 
     const text = normalizeText(message);
     const category = await classifyQuery(text);
+    console.log("LLM category:", category);
+
     let reply;
     let data;
 
@@ -26,17 +29,42 @@ module.exports = async function chatbot(req, res) {
 
       if (intent === "STOCK_QUERY") {
         data = await db.getStock(product);
-        reply = buildReply("STOCK_QUERY", data, product);
+        
+        const truth = {
+          type: "STOCK_RESULT",
+          product,
+          stock: data
+        };
+
+        reply =
+          (await casualReply(truth)) ||
+          buildReply("STOCK_QUERY", data, product);
       }
 
       else if (intent === "LOW_STOCK") {
         data = await db.getLowStock();
-        reply = buildReply("LOW_STOCK", data);
+        
+        const truth = {
+          type: "LOW_STOCK",
+          items: data
+        };
+
+        reply =
+          (await casualReply(truth)) ||
+          buildReply("LOW_STOCK", data);
       }
 
       else if (intent === "DEAD_STOCK") {
         data = await db.getDeadStock();
-        reply = buildReply("DEAD_STOCK", data);
+        
+        const truth = {
+          type: "DEAD_STOCK",
+          items: data
+        };
+
+        reply =
+          (await casualReply(truth)) ||
+          buildReply("DEAD_STOCK", data);
       }
 
       else {
@@ -49,17 +77,27 @@ module.exports = async function chatbot(req, res) {
       const topProduct = await db.getTopSellingProduct();
 
       if (!topProduct) {
-        reply = "I don’t have enough data yet, but I can help you check stock or sales.";
-      } else {
+        reply = "I don't have enough data yet, but I can help you check stock or sales.";
+      } 
+      else {
+        const truth = {
+          type: "OPINION",
+          bestProduct: topProduct.name,
+          reason: "highest sales"
+        };
         reply =
-          `I don’t have personal preferences, but based on your sales data, ` +
-          `${topProduct.name} is currently performing the best.`;
+          (await casualReply(truth)) ||
+          `I don't have personal preferences, but based on your sales data, ${topProduct.name} is currently performing the best.`;
       }
     }
 
     // 3. GREETINGS
     else if (category === "GREETING") {
-      reply = "Hey! 👋 I’m here to help you manage your inventory. What would you like to check?";
+      const truth = { type: "GREETING" };
+
+      reply =
+        (await casualReply(truth)) ||
+        "Hey! 👋 I'm here to help you manage your inventory. What would you like to check?";
     }
 
     // 4. HELP
@@ -69,7 +107,7 @@ module.exports = async function chatbot(req, res) {
 
     // 5. UNKNOWN
     else {
-      reply = "I’m not fully sure about that, but I can help you with inventory or stock-related questions.";
+      reply = "I'm not fully sure about that, but I can help you with inventory or stock-related questions.";
     }
 
     // Final response

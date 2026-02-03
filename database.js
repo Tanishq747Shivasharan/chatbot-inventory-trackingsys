@@ -58,11 +58,11 @@ async function getDeadStock() {
 // Top selling product
 async function getTopSellingProduct() {
   const result = await pool.query(
-    `SELECT p.name, SUM(s.quantity_sold) as total_sold
-     FROM products p
-     JOIN stock_logs s ON p.id = s.product_id
-     WHERE s.quantity_sold > 0
-     GROUP BY p.id, p.name
+    `SELECT p.name, SUM(s.quantity) AS total_sold
+     FROM stock_logs s
+     JOIN products p ON p.id = s.product_id
+     WHERE s.quantity > 0
+     GROUP BY p.name
      ORDER BY total_sold DESC
      LIMIT 1`
   );

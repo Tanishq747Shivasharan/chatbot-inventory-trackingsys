@@ -1,41 +1,37 @@
 const axios = require("axios");
 
 async function casualReply(truth) {
+  try {
     const prompt = `
 You are a friendly AI inventory assistant.
 
 Rules:
-- Be casual and natural (like ChatGPT or Claude)
-- Do NOT invent data
-- ONLY use the information provided
-- Do NOT add opinions unless explicitly allowed
+- Sound casual and helpful (like ChatGPT or Claude)
+- Do NOT invent facts
+- ONLY use the data provided below
+- If data is missing, say so politely
 
 Data:
 ${JSON.stringify(truth)}
 
-Respond naturally to the user.
+Reply naturally in 1–2 sentences.
 `;
 
     const response = await axios.post(
-        "https://api.openai.com/v1/chat/completions",
-        {
-            model: "gpt-3.5-turbo",
-            messages: [
-                { role: "system", content: "You rephrase facts casually." },
-                { role: "user", content: prompt }
-            ],
-            temperature: 0.7,   
-            max_tokens: 80
-        },
-        {
-            headers: {
-                Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-                "Content-Type": "application/json"
-            }
-        }
+      "http://localhost:11434/api/generate",
+      {
+        model: "mistral",
+        prompt,
+        stream: false
+      }
     );
 
-    return response.data.choices[0].message.content.trim();
+    return response.data.response.trim();
+
+  } catch (error) {
+    console.error("Casual responder failed:", error.message);
+    return null; // fail-safe
+  }
 }
 
 module.exports = casualReply;
