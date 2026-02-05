@@ -1,3 +1,4 @@
+require("dotenv").config();
 const axios = require("axios");
 
 // Language-specific base responses that LLM will polish
@@ -86,7 +87,10 @@ async function casualReply(truth, userLanguage = "en-US") {
     // Get language-appropriate base response
     const baseResponse = getLanguageBaseResponse(truth, targetLanguage);
     
-    const prompt = `You are an inventory management assistant. Make this response sound natural and conversational while keeping the exact same meaning and language.
+    // Try RapidAPI first if available
+    if (process.env.RAPIDAPI_KEY && process.env.RAPIDAPI_HOST) {
+      try {
+        const prompt = `You are an inventory management assistant. Make this response sound natural and conversational while keeping the exact same meaning and language.
 
 CRITICAL RULES:
 - NEVER change the language from ${targetLanguage}
@@ -102,19 +106,38 @@ Base response to rephrase: "${baseResponse}"
 
 Natural response in ${targetLanguage}:`;
 
-    const response = await axios.post(
-      "http://localhost:11434/api/generate",
-      {
-        model: "mistral",
-        prompt,
-        stream: false
-      }
-    );
+        const response = await axios.post(
+          `https://${process.env.RAPIDAPI_HOST}/chat/completions`,
+          {
+            model: "gpt-4o-mini",
+            messages: [
+              { role: "user", content: prompt }
+            ],
+            temperature: 0.4
+          },
+          {
+            headers: {
+              "content-type": "application/json",
+              "X-RapidAPI-Key": process.env.RAPIDAPI_KEY,
+              "X-RapidAPI-Host": process.env.RAPIDAPI_HOST
+            },
+            timeout: 10000 // 10 second timeout
+          }
+        );
 
-    const result = response.data.response.trim();
+        const result = response.data.choices[0].message.content.trim();
+        
+        // Return the enhanced response if successful
+        if (result && result.length > 0) {
+          return result;
+        }
+      } catch (apiError) {
+        console.error("RapidAPI casual responder failed, using base response:", apiError.message);
+      }
+    }
     
-    // Fallback to base response if LLM fails or returns empty
-    return result || baseResponse;
+    // Fallback to base response
+    return baseResponse;
 
   } catch (error) {
     console.error("Casual responder failed:", error.message);
