@@ -1,8 +1,10 @@
 const normalizeText = require("./normalize");
 const extractProduct = require("./entityExtractor");
+const { extractDemandEntities } = require("./entityExtractor");
 const db = require("./database");
 const classifyQuery = require("./llmClassifier");
 const casualReply = require("./casualResponder");
+const { sendSupplierDemandEmail } = require("./emailService");
 
 // Language-aware fallback responses
 const getLanguageFallback = (type, lang, data = null, product = null) => {
@@ -72,6 +74,43 @@ const getLanguageFallback = (type, lang, data = null, product = null) => {
   }
   
   return langFallbacks.ERROR();
+};
+
+const getSupplierDemandReply = (type, lang, params = {}) => {
+  const { supplier, product, quantity } = params;
+  const replies = {
+    "en-US": {
+      SUCCESS: () => `Order request sent to ${supplier} for ${quantity} units of ${product}.`,
+      MISSING_QUANTITY: () => `How many units of ${product} should I request from ${supplier}?`,
+      MISSING_PRODUCT: () => `Which product should I request from ${supplier}?`,
+      MISSING_SUPPLIER: () => `Which supplier should I send the demand to for ${product}?`,
+      SUPPLIER_NOT_FOUND: () => `I couldn't find supplier ${supplier} in the database.`,
+      EMAIL_NOT_CONFIGURED: () => "Email is not configured. Please set SMTP settings.",
+      EMAIL_FAILED: () => "I couldn't send the email right now. Please try again."
+    },
+    "hi-IN": {
+      SUCCESS: () => `${supplier} को ${quantity} ${product} के लिए ऑर्डर अनुरोध भेज दिया गया है।`,
+      MISSING_QUANTITY: () => `${supplier} से ${product} के लिए कितनी मात्रा मंगवानी है?`,
+      MISSING_PRODUCT: () => `${supplier} से किस उत्पाद के लिए अनुरोध भेजना है?`,
+      MISSING_SUPPLIER: () => `${product} के लिए किस सप्लायर को अनुरोध भेजना है?`,
+      SUPPLIER_NOT_FOUND: () => `डेटाबेस में ${supplier} सप्लायर नहीं मिला।`,
+      EMAIL_NOT_CONFIGURED: () => "ईमेल कॉन्फ़िगर नहीं है। कृपया SMTP सेटिंग्स सेट करें।",
+      EMAIL_FAILED: () => "ईमेल भेजा नहीं जा सका। कृपया बाद में प्रयास करें।"
+    },
+    "mr-IN": {
+      SUCCESS: () => `${supplier} यांना ${quantity} ${product} साठी ऑर्डर विनंती पाठवली आहे.`,
+      MISSING_QUANTITY: () => `${supplier} कडून ${product} साठी किती प्रमाणात मागवायचे आहे?`,
+      MISSING_PRODUCT: () => `${supplier} कडून कोणत्या उत्पादनासाठी विनंती पाठवायची?`,
+      MISSING_SUPPLIER: () => `${product} साठी कोणत्या पुरवठादाराला विनंती पाठवायची?`,
+      SUPPLIER_NOT_FOUND: () => `डेटाबेसमध्ये ${supplier} पुरवठादार सापडला नाही.`,
+      EMAIL_NOT_CONFIGURED: () => "ईमेल कॉन्फिगर नाही. कृपया SMTP सेटिंग्ज सेट करा.",
+      EMAIL_FAILED: () => "ईमेल पाठवता आला नाही. कृपया नंतर प्रयत्न करा."
+    }
+  };
+
+  const langReplies = replies[lang] || replies["en-US"];
+  const replyFunc = langReplies[type] || replies["en-US"][type];
+  return replyFunc();
 };
 
 module.exports = async function chatbot(req, res) {
@@ -250,6 +289,54 @@ module.exports = async function chatbot(req, res) {
       if (!reply) {
         reply = getLanguageFallback("DEAD_STOCK", lang, data);
       }
+    }
+
+    else if (intent === "SUPPLIER_DEMAND") {
+      const entities = await extractDemandEntities(text);
+      const product = entities.product;
+      const quantity = entities.quantity;
+      const supplier = entities.supplier;
+
+      if (!supplier) {
+        const productLabel = product || (lang === "hi-IN" ? "उत्पाद" : lang === "mr-IN" ? "उत्पादन" : "the product");
+        reply = getSupplierDemandReply("MISSING_SUPPLIER", lang, { product: productLabel });
+        return res.json({ reply });
+      }
+
+      if (!product) {
+        reply = getSupplierDemandReply("MISSING_PRODUCT", lang, { supplier });
+        return res.json({ reply });
+      }
+
+      if (!quantity) {
+        reply = getSupplierDemandReply("MISSING_QUANTITY", lang, { supplier, product });
+        return res.json({ reply });
+      }
+
+      const supplierRecord = await db.getSupplierByName(supplier, businessId);
+      if (!supplierRecord || !supplierRecord.email) {
+        reply = getSupplierDemandReply("SUPPLIER_NOT_FOUND", lang, { supplier });
+        return res.json({ reply });
+      }
+
+      const supplierName = supplierRecord.name || supplierRecord.supplier_name || supplier;
+      const emailResult = await sendSupplierDemandEmail({
+        supplierEmail: supplierRecord.email,
+        supplierName,
+        product,
+        quantity
+      });
+
+      if (!emailResult.ok) {
+        if (emailResult.error === "EMAIL_NOT_CONFIGURED") {
+          reply = getSupplierDemandReply("EMAIL_NOT_CONFIGURED", lang, { supplier, product, quantity });
+        } else {
+          reply = getSupplierDemandReply("EMAIL_FAILED", lang, { supplier, product, quantity });
+        }
+        return res.json({ reply });
+      }
+
+      reply = getSupplierDemandReply("SUCCESS", lang, { supplier: supplierName, product, quantity });
     }
 
     else if (intent === "OPINION") {

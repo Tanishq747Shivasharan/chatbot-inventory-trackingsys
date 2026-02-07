@@ -443,7 +443,7 @@ export default function ChatbotWithVoice() {
     applyAnimationState("processing");
 
     try {
-      const res = await fetch("http://localhost:5000/chatbot", {
+      const res = await fetch("http://localhost:3000/chatbot", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"

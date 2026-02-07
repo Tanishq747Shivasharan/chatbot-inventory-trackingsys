@@ -13,6 +13,7 @@ async function classifyQuery(text) {
       PRODUCT_DETAILS - User asks for detailed information about a product (price, description, etc.)
       CATEGORY_PRODUCTS - User asks about products in a specific category
       SUPPLIER_PRODUCTS - User asks about products from a specific supplier
+      SUPPLIER_DEMAND - User wants to order/request quantities from a supplier
       EXPIRING_PRODUCTS - User asks about products that are expiring soon
       OVERSTOCKED_PRODUCTS - User asks about products with too much stock
       PRODUCT_PRICING - User asks about product prices or profit margins
@@ -36,6 +37,9 @@ async function classifyQuery(text) {
       "rice product details" → PRODUCT_DETAILS
       "show me all dairy products" → CATEGORY_PRODUCTS
       "products from ABC supplier" → SUPPLIER_PRODUCTS
+      "Order 50 Maggi from Manik" → SUPPLIER_DEMAND
+      "मणिक से 50 मैगी मंगवानी है" → SUPPLIER_DEMAND
+      "मणिक कडून 50 मॅगी मागवायच्या आहेत" → SUPPLIER_DEMAND
       "which products are expiring" → EXPIRING_PRODUCTS
       "expiring items" → EXPIRING_PRODUCTS
       "overstocked products" → OVERSTOCKED_PRODUCTS
@@ -89,7 +93,7 @@ async function classifyQuery(text) {
           "STOCK_QUERY", "LOW_STOCK", "DEAD_STOCK", "PRODUCT_DETAILS",
           "CATEGORY_PRODUCTS", "SUPPLIER_PRODUCTS", "EXPIRING_PRODUCTS",
           "OVERSTOCKED_PRODUCTS", "PRODUCT_PRICING", "INVENTORY_SUMMARY",
-          "OPINION", "GREETING", "HELP", "UNKNOWN"
+          "OPINION", "GREETING", "HELP", "SUPPLIER_DEMAND", "UNKNOWN"
         ];
 
         // Extract the intent from response
@@ -157,7 +161,18 @@ function fallbackClassification(text) {
   if (lowerText.match(/\b(summary|total|overall|report|सारांश|कुल|एकूण|रिपोर्ट|சுருக்கம்|மொத்தம்|మొత్తం|నివేదిక)\b/)) {
     return "INVENTORY_SUMMARY";
   }
-  
+
+  // Supplier demand patterns (place before supplier/products/stock)
+  if (
+    lowerText.match(/\b(order|purchase|buy|request|demand|send)\b/) &&
+    lowerText.match(/\b(from|supplier|vendor)\b/)
+  ) {
+    return "SUPPLIER_DEMAND";
+  }
+  if (lowerText.match(/(मंगव|मागव|ऑर्डर|मागणी|खरेदी)/) && lowerText.match(/(से|कडून|पुरवठादार|विक्रेता|आपूर्तिकर्ता)/)) {
+    return "SUPPLIER_DEMAND";
+  }
+
   // Pricing patterns
   if (lowerText.match(/\b(price|pricing|profit|cost|margin|कीमत|मूल्य|लाभ|किंमत|விலை|లాభం|ధర)\b/)) {
     return "PRODUCT_PRICING";

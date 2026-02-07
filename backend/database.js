@@ -70,8 +70,7 @@ async function getProductsByCategory(categoryName, businessId) {
     .eq("is_active", true)
     .ilike("categories.category_name", `%${categoryName}%`);
 
-  if (error) return [];
-  return data;
+    return data;
 }
 
 // Get products by supplier
@@ -92,6 +91,51 @@ async function getProductsBySupplier(supplierName, businessId) {
 
   if (error) return [];
   return data;
+}
+
+// Get supplier details by name
+async function getSupplierByName(supplierName, businessId) {
+  try {
+    let { data, error } = await supabase
+      .from("suppliers")
+      .select("*")
+      .eq("business_id", businessId)
+      .ilike("name", `%${supplierName}%`)
+      .limit(1);
+
+    if (error && error.message && error.message.includes("business_id")) {
+      const retry = await supabase
+        .from("suppliers")
+        .select("*")
+        .ilike("name", `%${supplierName}%`)
+        .limit(1);
+      data = retry.data;
+      error = retry.error;
+    }
+
+    if (error && error.message && error.message.includes("name")) {
+      let fallback = await supabase
+        .from("suppliers")
+        .select("*")
+        .eq("business_id", businessId)
+        .ilike("supplier_name", `%${supplierName}%`)
+        .limit(1);
+      if (fallback.error && fallback.error.message && fallback.error.message.includes("business_id")) {
+        fallback = await supabase
+          .from("suppliers")
+          .select("*")
+          .ilike("supplier_name", `%${supplierName}%`)
+          .limit(1);
+      }
+      data = fallback.data;
+      error = fallback.error;
+    }
+
+    if (error || !data || data.length === 0) return null;
+    return data[0];
+  } catch (err) {
+    return null;
+  }
 }
 
 // Get expiring products (within specified days)
@@ -238,6 +282,7 @@ module.exports = {
   getProductDetails,
   getProductsByCategory,
   getProductsBySupplier,
+  getSupplierByName,
   getExpiringProducts,
   getOverstockedProducts,
   getProductPricing,
